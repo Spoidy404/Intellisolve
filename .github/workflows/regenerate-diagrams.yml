@@ -1,0 +1,103 @@
+name: Regenerate accurate IntelliSolve UML PNGs
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install cairosvg
+      - name: Generate accurate diagram artwork
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import cairosvg, html
+          OUT=Path("Diagrams"); OUT.mkdir(exist_ok=True)
+          C={
+           "blue":"#dbeafe","teal":"#ccfbf1","amber":"#fef3c7","pink":"#fce7f3",
+           "ink":"#172554","line":"#64748b","bg":"#f8fafc","border":"#2563eb"
+          }
+          def render(filename,title,subtitle,nodes,edges):
+           W,H=1500,1100
+           s=[f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}">',
+           '<defs><linearGradient id="bg" x2="0" y2="1"><stop stop-color="#f8fafc"/><stop offset="1" stop-color="#eef2ff"/></linearGradient><marker id="arr" markerWidth="12" markerHeight="12" refX="9" refY="4" orient="auto"><path d="M0 0 L0 8 L10 4z" fill="#64748b"/></marker><filter id="shadow"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#64748b" flood-opacity=".18"/></filter></defs>',
+           f'<rect width="{W}" height="{H}" fill="url(#bg)"/>',
+           f'<text x="750" y="62" text-anchor="middle" font-family="Arial" font-size="34" font-weight="700" fill="#0f172a">{html.escape(title)}</text>',
+           f'<text x="750" y="98" text-anchor="middle" font-family="Arial" font-size="17" fill="#475569">{html.escape(subtitle)}</text>']
+           for a,b,label in edges:
+            x,y,w,h,_,_=nodes[a]; X,Y,ww,hh,_,_=nodes[b]
+            x1=x+w/2;y1=y+h/2;x2=X+ww/2;y2=Y+hh/2
+            s.append(f'<path d="M{x1} {y1} L{x2} {y2}" stroke="{C["line"]}" stroke-width="2.5" fill="none" marker-end="url(#arr)"/>')
+            if label:s.append(f'<text x="{(x1+x2)/2}" y="{(y1+y2)/2-8}" font-family="Arial" font-size="13" fill="#334155" text-anchor="middle">{html.escape(label)}</text>')
+           for x,y,w,h,title,body in nodes:
+            s.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="18" fill="{C["blue"]}" stroke="{C["border"]}" stroke-width="2.5" filter="url(#shadow)"/>')
+            s.append(f'<text x="{x+w/2}" y="{y+30}" text-anchor="middle" font-family="Arial" font-size="18" font-weight="700" fill="{C["ink"]}">{html.escape(title)}</text>')
+            for i,line in enumerate(body):
+             s.append(f'<text x="{x+18}" y="{y+58+i*23}" font-family="Arial" font-size="14" fill="#1e293b">{html.escape(line)}</text>')
+           s.append('<text x="750" y="1065" text-anchor="middle" font-family="Arial" font-size="13" fill="#64748b">IntelliSolve • Derived from inspected source files • Static PNG overview</text></svg>')
+           cairosvg.svg2png(bytestring="".join(s).encode(),write_to=str(OUT/filename),output_width=1800,output_height=1320)
+          render("ActivityDiagram.png","ACTIVITY DIAGRAM","Actual solve flow: drawing canvas → FastAPI → Pillow → Gemini → answer overlays",[
+           (570,140,360,100,"Start / Home",["Home() React component","User draws on HTML canvas"]),
+           (570,300,360,120,"Canvas interaction",["startDrawing() • draw()","stopDrawing() • saveHistory()"]),
+           (570,490,360,110,"Run action",["runRoute()","canvas.toDataURL('image/png')"]),
+           (570,670,360,120,"POST /calculate",["ImageData: image, dict_of_vars","FastAPI route.run(data)"]),
+           (90,860,380,120,"Decode image",["base64.b64decode()","BytesIO() → PIL.Image.open()"]),
+           (560,860,380,120,"AI analysis",["analyze_image(img, dict_of_vars)","Gemini generate_content()"]),
+           (1030,860,380,120,"Parse and return",["ast.literal_eval()","assign flag; JSON response"]),
+           (570,1010,360,70,"Render result",["setResult() → draggable MathJax overlay"])],
+           [(0,1,""),(1,2,""),(2,3,"HTTP"),(3,4,""),(3,5,""),(4,5,"PIL image"),(5,6,"answers"),(6,7,"response.data")])
+          render("ComponentDiagram.png","COMPONENT DIAGRAM","Implemented frontend, API, image-processing and AI components",[
+           (560,130,380,90,"React + TypeScript UI",["App.tsx → Home component","Vite frontend"]),
+           (70,330,390,140,"Canvas UI",["canvasRef / previewCanvasRef","pen, line, rectangle, circle","eraser, text; color; brushSize"]),
+           (555,330,390,140,"Canvas state + controls",["history / redoStack / reset","undo(), redo(), resetCanvas()","saveHistory(), runRoute()"]),
+           (1040,330,390,140,"Result overlays",["latexBoxes / textBoxes","Draggable + MathJax","renderLatexToCanvas()"]),
+           (560,570,380,110,"Axios client",["POST VITE_API_URL + /calculate","image data URL + dict_of_vars"]),
+           (560,760,380,130,"FastAPI backend",["main.py: app + CORS + root()","include_router(/calculate)"]),
+           (70,930,390,110,"Request + image",["ImageData: image, dict_of_vars","Base64 → BytesIO → Pillow"]),
+           (555,930,390,110,"Calculator utility",["analyze_image(img, dict_of_vars)","prompt + Gemini; parse result"]),
+           (1040,930,390,110,"External AI SDK",["google.generativeai","GenerativeModel.generate_content()"])],
+           [(0,1,""),(0,2,""),(0,3,""),(1,4,""),(2,4,""),(3,4,""),(4,5,"HTTP"),(5,6,""),(5,7,""),(7,8,"")])
+          render("SequenceDiagram.png","SEQUENCE DIAGRAM","Sequence for solving a drawing in the current application",[
+           (40,170,260,110,"User",["Draw problem","Click Run"]),
+           (345,170,300,150,"Home component",["runRoute()","canvas.toDataURL()","dictOfVars"]),
+           (690,170,240,110,"Axios",["axios.post()","/calculate"]),
+           (975,170,300,150,"FastAPI route",["run(data)","ImageData validation","Base64 decode"]),
+           (975,500,300,130,"Pillow",["Image.open(BytesIO(...))","PIL Image"]),
+           (630,760,350,150,"Gemini utility",["analyze_image()","generate_content([prompt,img])","ast.literal_eval(response.text)"]),
+           (210,760,300,130,"JSON response",["message, data, status","expr / result / assign"]),
+           (40,970,260,100,"Canvas result",["setResult()","MathJax draggable box"])],
+           [(0,1,"draw + Run"),(1,2,"PNG + variables"),(2,3,"POST"),(3,4,"image bytes"),(4,5,"image"),(3,5,"dict_of_vars"),(5,6,"answers"),(6,7,"render")])
+          render("UseCaseDiagram.png","USE CASE DIAGRAM","User capabilities actually implemented in Home and backend",[
+           (70,480,250,120,"User",["Interacts with canvas"]),
+           (500,130,430,100,"Draw / annotate",["pen, line, rectangle, circle","eraser, text"]),
+           (500,280,430,100,"Configure drawing",["color swatches","brush size slider"]),
+           (500,430,430,100,"Manage canvas",["undo() • redo() • resetCanvas()"]),
+           (500,580,430,100,"Save drawing",["Save Image → drawing.png"]),
+           (500,730,430,100,"Solve drawing",["Run → POST /calculate"]),
+           (1030,730,400,130,"Analyze with Gemini",["Image + dict_of_vars","math / equations / graph / concepts"]),
+           (1030,930,400,100,"View answer",["expr + result","draggable MathJax overlay"])],
+           [(0,1,""),(0,2,""),(0,3,""),(0,4,""),(0,5,""),(5,6,"includes"),(6,7,"")])
+          render("ClassDiagram.png","CLASS / MODULE DIAGRAM","Real interfaces, state fields and functions (not invented application classes)",[
+           (60,140,420,250,"Home() • React component",["State: isDrawing, color, brushSize","reset, dictOfVars, result","latexBoxes, textBoxes, tool, startPos","history, redoStack","Refs: canvasRef, previewCanvasRef","Methods: startDrawing(), draw()","stopDrawing(), runRoute()","undo(), redo(), resetCanvas()","saveHistory(), renderLatexToCanvas()"]),
+           (540,140,400,200,"ImageData • Pydantic model",["image: str","dict_of_vars: dict"]),
+           (1010,140,420,250,"FastAPI app • main.py",["lifespan(app)","root() → server status","CORSMiddleware configuration","include_router(calculator_router)"]),
+           (60,520,420,230,"Calculator route • route.py",["router = APIRouter()","run(data: ImageData)","Base64 decode + BytesIO","Image.open()","analyze_image(image, dict_of_vars)","return message, data, status"]),
+           (540,520,400,260,"Calculator utility • utils.py",["analyze_image(img, dict_of_vars)","GenerativeModel(model_name=...)","json.dumps(dict_of_vars)","model.generate_content()","ast.literal_eval(response.text)","normalize assign flag"]),
+           (1010,520,420,230,"Frontend response types",["GeneratedResult","expression: string","answer: string","Response","expr: string; result: string","assign: boolean"]),
+           (540,880,400,130,"Runtime dependencies",["Pillow • Google Generative AI SDK","FastAPI • Pydantic • Axios"])],
+           [(0,1,"request"),(2,3,"routes"),(3,1,"validates"),(3,4,"calls"),(4,5,"JSON data"),(4,6,"uses")])
+          PY
+      - name: Commit PNGs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Diagrams/*.png
+          git commit -m "Improve UML PNGs with source-accurate functions and attributes" || exit 0
+          git push origin HEAD:main
