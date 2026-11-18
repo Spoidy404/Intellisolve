@@ -1,6 +1,9 @@
 name: Regenerate accurate IntelliSolve UML PNGs
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/regenerate-diagrams.yml'
 permissions:
   contents: write
 jobs:
