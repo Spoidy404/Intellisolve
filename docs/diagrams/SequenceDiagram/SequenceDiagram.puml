@@ -1,0 +1,26 @@
+@startuml
+title IntelliSolve - Sequence Diagram (Solve Drawing)
+actor User
+participant "React Home / Canvas" as UI
+participant Axios
+participant "FastAPI /calculate" as API
+participant Pillow
+participant "Gemini Generative AI" as Gemini
+User -> UI : Draw problem and click Run
+UI -> UI : canvas.toDataURL("image/png")
+UI -> Axios : POST image + dict_of_vars
+Axios -> API : HTTP POST /calculate
+API -> API : Validate ImageData request
+API -> API : Split data URL and Base64 decode
+API -> Pillow : Image.open(BytesIO(image_bytes))
+Pillow --> API : Image object
+API -> Gemini : Prompt + image + assigned variables
+Gemini --> API : Generated structured text
+API -> API : ast.literal_eval(response.text)
+API -> API : Set assign flag on each answer
+API --> Axios : {message, data, status}
+Axios --> UI : Response data
+UI -> UI : Set expression / answer state
+UI -> UI : Render MathJax answer overlay
+UI --> User : Display answer on canvas
+@enduml
